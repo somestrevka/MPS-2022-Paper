@@ -1,0 +1,94 @@
+For the mps database, the number of 
+-features has been determined using the following query:
+INSERT INTO aux
+SELECT projectname, COUNT(distinct(id)) FROM data
+WHERE `type` LIKE 'Improvement' OR `type` LIKE 'New Feature'
+GROUP BY projectname;
+
+-fixed bugs:
+INSERT INTO aux
+SELECT projectname, COUNT(distinct(id)) FROM data
+WHERE `type` LIKE 'Bug' AND (resolution LIKE 'Done' OR resolution LIKE 'Fixed')
+GROUP BY projectname;
+
+-bugs
+INSERT INTO aux
+SELECT projectname, COUNT(distinct(id)) FROM data
+WHERE `type` LIKE 'Bug'
+GROUP BY projectname;
+
+The query used to populate the features table:
+INSERT INTO features
+SELECT projectname, title, created, resolutiondate FROM data d
+WHERE `type` LIKE 'Improvement' OR `type` LIKE 'New Feature'
+ON DUPLICATE key UPDATE 
+creation_date = d.created,
+resolution_date = d.resolutiondate;
+
+In order to obtain any meaningful data, the number of contributors is considered to be the number of people who have commented on a project:
+INSERT INTO aux
+SELECT project, count(distinct(developer)) 
+FROM all_yearwise_devconcepts
+GROUP BY project;
+
+TAWOS db:
+In order to establish the number of contributors, the unique of users interacting with the issues will be used:
+-step one: select all the distinct creators into an auxiliary table
+INSERT INTO aux_1(id, user_id)
+SELECT project_id, creator_id
+FROM issue
+WHERE creator_id IS NOT NULL
+ON DUPLICATE KEY UPDATE
+user_id = creator_id;
+
+-step two: repeat step one for reporters
+INSERT INTO aux_1(id, user_id)
+SELECT project_id, reporter_id
+FROM issue
+WHERE reporter_id IS NOT NULL
+ON DUPLICATE KEY UPDATE
+user_id = reporter_id;
+
+-step three: repeat step two for assignee_id
+INSERT INTO aux_1(id, user_id)
+SELECT project_id, Assignee_ID
+FROM issue
+WHERE Assignee_ID IS NOT NULL
+ON DUPLICATE KEY UPDATE
+user_id = Assignee_ID;
+
+The final query for the number of contributors:
+INSERT INTO centralized_data(project_name, no_contributors)
+SELECT p.Name, COUNT(a.user_id) 
+FROM aux_1 a JOIN project p ON a.id = p.ID GROUP BY a.id;
+
+The number of bugs is determined from the issue table:
+INSERT INTO aux(project, item)
+SELECT project_id, COUNT(distinct(issue_key))
+FROM issue
+WHERE `type` LIKE 'Bug'
+GROUP BY project_id;
+
+The number of fixed bugs:
+INSERT INTO aux(project, item)
+SELECT project_id, COUNT(distinct(issue_key))
+FROM issue
+WHERE `type` LIKE 'Bug' AND resolution IS NOT null
+GROUP BY project_id;
+
+Features:
+INSERT INTO aux(project, item)
+SELECT project_id, COUNT(distinct(issue_key))
+FROM issue
+WHERE (`type` LIKE 'New Feature' OR `type` LIKE 'Improvement')
+GROUP BY project_id;
+
+To better analyze the time needed to deliver a feature, an additional table was created with the following query being used to select the data:
+INSERT INTO features(title, project, creation_date, estimation_date, resolution_date)
+SELECT i.title, p.Name, i.Creation_Date, i.Estimation_Date, i.Resolution_Date 
+FROM issue i JOIN project p ON i.project_id = p.ID
+ON DUPLICATE KEY UPDATE
+creation_date = i.Creation_Date,
+resolution_date = i.Resolution_Date,
+estimation_date = i.Estimation_Date;
+
